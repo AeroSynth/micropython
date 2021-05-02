@@ -365,7 +365,8 @@ STATIC mp_obj_t MP_VFS_LFSx(stat)(mp_obj_t self_in, mp_obj_t path_in) {
         for (size_t i = sizeof(mtime_buf); i > 0; --i) {
             ns = ns << 8 | mtime_buf[i - 1];
         }
-        mtime = timeutils_seconds_since_2000_from_nanoseconds_since_1970(ns);
+        // On-disk storage of timestamps uses 1970 as the Epoch, so convert to host's Epoch.
+        mtime = timeutils_seconds_since_epoch_from_nanoseconds_since_1970(ns);
     }
     #endif
 
@@ -377,9 +378,9 @@ STATIC mp_obj_t MP_VFS_LFSx(stat)(mp_obj_t self_in, mp_obj_t path_in) {
     t->items[4] = MP_OBJ_NEW_SMALL_INT(0); // st_uid
     t->items[5] = MP_OBJ_NEW_SMALL_INT(0); // st_gid
     t->items[6] = mp_obj_new_int_from_uint(info.size); // st_size
-    t->items[7] = MP_OBJ_NEW_SMALL_INT(mtime); // st_atime
-    t->items[8] = MP_OBJ_NEW_SMALL_INT(mtime); // st_mtime
-    t->items[9] = MP_OBJ_NEW_SMALL_INT(mtime); // st_ctime
+    t->items[7] = mp_obj_new_int_from_uint(mtime); // st_atime
+    t->items[8] = mp_obj_new_int_from_uint(mtime); // st_mtime
+    t->items[9] = mp_obj_new_int_from_uint(mtime); // st_ctime
 
     return MP_OBJ_FROM_PTR(t);
 }
@@ -422,10 +423,16 @@ STATIC mp_obj_t MP_VFS_LFSx(statvfs)(mp_obj_t self_in, mp_obj_t path_in) {
 STATIC MP_DEFINE_CONST_FUN_OBJ_2(MP_VFS_LFSx(statvfs_obj), MP_VFS_LFSx(statvfs));
 
 STATIC mp_obj_t MP_VFS_LFSx(mount)(mp_obj_t self_in, mp_obj_t readonly, mp_obj_t mkfs) {
-    (void)self_in;
-    (void)readonly;
+    MP_OBJ_VFS_LFSx *self = MP_OBJ_TO_PTR(self_in);
     (void)mkfs;
-    // already called LFSx_API(mount) in MP_VFS_LFSx(make_new)
+
+    // Make block device read-only if requested.
+    if (mp_obj_is_true(readonly)) {
+        self->blockdev.writeblocks[0] = MP_OBJ_NULL;
+    }
+
+    // Already called LFSx_API(mount) in MP_VFS_LFSx(make_new) so the filesystem is ready.
+
     return mp_const_none;
 }
 STATIC MP_DEFINE_CONST_FUN_OBJ_3(MP_VFS_LFSx(mount_obj), MP_VFS_LFSx(mount));
